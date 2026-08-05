@@ -8,6 +8,21 @@
 (function () {
   var D = window.__glDiag = { errs: [], logs: [] };
 
+  // ── Qualite de rendu ────────────────────────────────────────────────────
+  // Le panneau HTML de GMod peint SANS GPU, pendant que le jeu charge la carte.
+  // Or la page empile precisement ce qui coute cher dans ces conditions : un
+  // canvas plein ecran en mix-blend-mode redessine a chaque image avec des
+  // degrades radiaux et du shadowBlur, 49 flous, 26 fusions de calques, et 17
+  // silhouettes decoratives floutees derriere les personnages.
+  //
+  // Dans GMod on part donc d'emblee en qualite reduite — c'est toujours du
+  // rendu logiciel, inutile d'attendre de mesurer. Ailleurs on ne touche a
+  // rien : l'echelle automatique (fin de page) descendra d'elle-meme si la
+  // machine ne suit pas.
+  var gmod = /GMod|Valve Source Client/i.test(navigator.userAgent);
+  window.__glQ = { canvas: gmod ? 0.7 : 1, parts: gmod ? 0.5 : 1, gmod: gmod };
+  if (gmod) document.documentElement.className += ' glq1';
+
   // support.js RATTRAPE ses erreurs et les envoie dans console.error
   // (« [dc-runtime] template compile FAILED for … »). Le panneau de GMod n'a
   // pas de console : sans ce relais, le runtime explique exactement ce qui
@@ -42,6 +57,19 @@
 })();
 </script>
 <script src="./support-86.js"></script>
+
+<style>
+/* Palier 1 — les 17 silhouettes decoratives derriere les personnages. Elles
+   portent a elles seules 17 flous et 17 mix-blend-mode ; les 36 vraies images
+   n'ont aucun flou. On perd le halo lumineux, rien d'autre. */
+html.glq1 img[style*="brightness(0)"] { display: none !important; }
+html.glq1 *, html.glq1 *::before, html.glq1 *::after {
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+/* Palier 2 — plus aucun filtre nulle part. L'image devient plus plate (ni
+   flous d'ambiance ni ombres portees), mais elle reste juste. */
+html.glq2 *, html.glq2 *::before, html.glq2 *::after { filter: none !important; }
+</style>
 </head>
 <body>
 <template id="__bundler_thumbnail" data-bg-color="#02101c">
@@ -89,7 +117,7 @@ a{color:#ffd98a;text-decoration:none;}a:hover{color:#fff3cf;}
 <div ref="{{ rootRef }}" style="position:relative;width:100vw;height:100vh;overflow:hidden;background:#02101c;font-family:'Barlow Condensed',sans-serif;cursor:pointer;user-select:none;">
 
   <div ref="{{ bgRef }}" style="position:absolute;inset:-6%;z-index:1;will-change:transform;">
-    <div style="position:absolute;inset:0;background-image:url('assets/background.png');background-size:cover;background-position:50% 44%;filter:saturate(.98) contrast(1.1) brightness(.66);"></div>
+    <div style="position:absolute;inset:0;background-image:url('assets/background.jpg');background-size:cover;background-position:50% 44%;filter:saturate(.98) contrast(1.1) brightness(.66);"></div>
     <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,34,68,.34) 0%,rgba(6,34,68,0) 26%);"></div>
     <div style="position:absolute;inset:0;background:radial-gradient(30% 20% at 50% 19%,rgba(255,242,206,.2),rgba(190,232,255,.05) 44%,rgba(190,232,255,0) 70%);mix-blend-mode:screen;"></div>
   </div>
@@ -569,7 +597,8 @@ class Component extends DCLogic {
 
   sizeCanvas() {
     const cv = this.fxRef.current; if (!cv) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2) *
+                ((window.__glQ && window.__glQ.canvas) || 1);
     const host = this.rootRef.current;
     this.w = (host ? host.clientWidth : 0) || window.innerWidth;
     this.h = (host ? host.clientHeight : 0) || window.innerHeight;
@@ -579,7 +608,8 @@ class Component extends DCLogic {
   }
 
   buildMotes() {
-    for (let i = 0; i < 52; i++) {
+    for (let i = 0, N = Math.round(52 * ((window.__glQ && window.__glQ.parts) || 1));
+         i < N; i++) {
       this.motes.push({
         x: Math.random(), y: Math.random(),
         r: 0.6 + Math.random() * 2.2,
@@ -629,7 +659,8 @@ class Component extends DCLogic {
   }
 
   spawnSparks(x, y) {
-    for (let i = 0; i < 46; i++) {
+    for (let i = 0, N = Math.round(46 * ((window.__glQ && window.__glQ.parts) || 1));
+         i < N; i++) {
       const a = Math.random() * 6.2832;
       const sp = 90 + Math.random() * 340;
       this.sparks.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 1, r: 0.8 + Math.random() * 2.2 });
@@ -852,6 +883,63 @@ class Component extends DCLogic {
       for (var k in API) w[k] = API[k];
     } catch (e) {}
   });
+})();
+</script>
+
+<script>
+(function () {
+  // Echelle de qualite AUTOMATIQUE. On mesure les images par seconde et on
+  // retire du travail tant que ca ne suit pas. Aucun UA a deviner : une machine
+  // qui tient la cadence ne descend jamais d'un palier.
+  var Q = window.__glQ || (window.__glQ = { canvas: 1, parts: 1 });
+  var brut = window.requestAnimationFrame.bind(window);
+  var niveau = Q.gmod ? 1 : 0;      // GMod demarre deja au palier 1
+  var debut = 0, images = 0, fenetres = 0;
+
+  function descendre(n) {
+    if (n <= niveau) return;
+    niveau = n;
+    document.documentElement.className += ' glq' + n;
+    if (n === 1) Q.canvas = 0.7;
+    if (n === 2) Q.canvas = 0.5;
+    if (n >= 3) {
+      // Dernier recours : plafonner la cadence a ~25 img/s. Les animations de
+      // la page sont pilotees par le temps ecoule (dt), donc rien ne se decale
+      // ni ne ralentit vraiment — c'est juste moins fluide.
+      var dernier = 0;
+      window.requestAnimationFrame = function (cb) {
+        return brut(function pas(t) {
+          if (t - dernier < 40) return brut(pas);
+          dernier = t; cb(t);
+        });
+      };
+    }
+    // Faire relire la taille du canvas (le composant ecoute 'resize').
+    try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+  }
+
+  function mesure(t) {
+    // Onglet en arriere-plan : le navigateur suspend les images, la mesure
+    // n'aurait aucun sens et ferait chuter la qualite pour rien.
+    if (document.hidden) { debut = 0; images = 0; }
+    else if (!debut) { debut = t; images = 0; }
+    else {
+      images++;
+      if (t - debut >= 1000) {
+        var fps = images * 1000 / (t - debut);
+        // La premiere fenetre est ignoree : decodage des images et montage du
+        // composant s'y bousculent, elle n'est pas representative.
+        if (fenetres++ >= 1 && images >= 5) {
+          if (fps < 24) descendre(3);
+          else if (fps < 32) descendre(2);
+          else if (fps < 45) descendre(1);
+        }
+        debut = 0; images = 0;
+      }
+    }
+    if (niveau < 3) brut(mesure);
+  }
+  brut(mesure);
 })();
 </script>
 
