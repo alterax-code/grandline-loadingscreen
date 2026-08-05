@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="ext-resource-dependency" content="assets/ost_grand_line.mp3" data-resource-id="ost" />
 <script>
 (function () {
   var D = window.__glDiag = { errs: [], logs: [] };
@@ -422,7 +421,7 @@ a{color:#ffd98a;text-decoration:none;}a:hover{color:#fff3cf;}
   </div>
 
   <div style="position:absolute;right:clamp(14px,1.6vw,28px);bottom:clamp(14px,1.6vw,28px);z-index:34;display:flex;align-items:center;gap:8px;">
-    <button ref="{{ soundBtnRef }}" onPointerDown="{{ toggleSound }}" style="display:flex;align-items:center;gap:9px;padding:8px 14px;border:1px solid rgba(255,217,138,.28);border-radius:2px;background:rgba(3,18,32,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:rgba(214,238,252,.9);font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.3em;text-transform:uppercase;cursor:pointer;" style-hover="border-color:rgba(255,217,138,.6);color:#ffe7a4;">
+    <button ref="{{ soundBtnRef }}" onPointerDown="{{ toggleSound }}" style="display:none;align-items:center;gap:9px;padding:8px 14px;border:1px solid rgba(255,217,138,.28);border-radius:2px;background:rgba(3,18,32,.62);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:rgba(214,238,252,.9);font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:.3em;text-transform:uppercase;cursor:pointer;" style-hover="border-color:rgba(255,217,138,.6);color:#ffe7a4;">
       <span ref="{{ soundIconRef }}" style="color:#5fc8ef;font-size:14px;line-height:1;">♫</span>
       <span ref="{{ soundLabelRef }}">Musique</span>
     </button>
@@ -549,6 +548,7 @@ class Component extends DCLogic {
   }
 
   initAudio() {
+    return;  // musique retiree — voir loadingscreen/README.md
     // one element per document, and one PLAYING document at a time
     document.querySelectorAll('audio').forEach((el) => { try { el.pause(); } catch (e) {} });
     let a = window.__glOst;
