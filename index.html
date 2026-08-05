@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="ext-resource-dependency" content="assets/ost_grand_line.mp3" data-resource-id="ost" />
+<script>
+(function () {
+  var D = window.__glDiag = { errs: [] };
+  window.addEventListener('error', function (e) {
+    D.errs.push((e.message || 'erreur') + '  [' +
+      String(e.filename || '').split('/').pop() + ':' + (e.lineno || 0) + ']');
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    D.errs.push('promesse rejetee : ' + ((r && (r.message || r)) || '?'));
+  });
+})();
+</script>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -815,6 +828,49 @@ class Component extends DCLogic {
       for (var k in API) w[k] = API[k];
     } catch (e) {}
   });
+})();
+</script>
+
+<script>
+(function () {
+  var D = window.__glDiag || { errs: [] };
+  setTimeout(function () {
+    var root = document.getElementById('dc-root');
+    var xdc  = document.querySelector('x-dc');
+    if (root && root.firstChild) return;          // rendu OK, on ne montre rien
+
+    var etat;
+    if (xdc) {
+      etat = "le runtime n'a pas reconnu le composant (<x-dc> intact)";
+      // Le masque de support.js porte un !important : seule une regle de meme
+      // specificite ajoutee APRES peut le battre.
+      var s = document.createElement('style');
+      s.textContent = 'x-dc{display:block!important}';
+      document.head.appendChild(s);
+    } else if (root) {
+      etat = 'composant monte, mais le rendu React est vide';
+    } else {
+      etat = "support.js ne s'est pas execute";
+    }
+
+    var im = document.images, ok = 0;
+    for (var i = 0; i < im.length; i++) if (im[i].naturalWidth > 0) ok++;
+
+    var L = ['ECRAN DE CHARGEMENT — diagnostic', etat,
+             'images ' + ok + '/' + im.length + '   fenetre ' +
+               window.innerWidth + 'x' + window.innerHeight,
+             'React ' + (typeof window.React) + '  ReactDOM ' + (typeof window.ReactDOM),
+             navigator.userAgent];
+    for (var k = 0; k < D.errs.length && k < 6; k++) L.push('! ' + D.errs[k]);
+    if (!D.errs.length) L.push('(aucune erreur JS remontee)');
+
+    var d = document.createElement('div');
+    d.setAttribute('style', 'position:fixed;left:0;right:0;bottom:0;z-index:2147483647;' +
+      'background:rgba(0,0,0,.82);color:#9fe8ff;font:12px/1.5 monospace;padding:10px 14px;' +
+      'white-space:pre-wrap;word-break:break-word;max-height:46%;overflow:auto');
+    d.textContent = L.join('\n');
+    document.body.appendChild(d);
+  }, 4500);
 })();
 </script>
 </body>
