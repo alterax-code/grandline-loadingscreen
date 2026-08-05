@@ -6,7 +6,31 @@
 <meta name="ext-resource-dependency" content="assets/ost_grand_line.mp3" data-resource-id="ost" />
 <script>
 (function () {
-  var D = window.__glDiag = { errs: [] };
+  var D = window.__glDiag = { errs: [], logs: [] };
+
+  // support.js RATTRAPE ses erreurs et les envoie dans console.error
+  // (« [dc-runtime] template compile FAILED for … »). Le panneau de GMod n'a
+  // pas de console : sans ce relais, le runtime explique exactement ce qui
+  // cloche et personne ne l'entend. Ecouter 'error' ne suffit donc pas.
+  var K = ['error', 'warn'];
+  for (var n = 0; n < K.length; n++) (function (k) {
+    var o = console[k];
+    console[k] = function () {
+      try {
+        var p = [];
+        for (var i = 0; i < arguments.length; i++) {
+          var a = arguments[i];
+          if (a && a.message) {
+            p.push((a.name || 'Error') + ': ' + a.message);
+            if (a.stack) p.push('   ' + String(a.stack).split('\n').slice(1, 3).join(' | '));
+          } else p.push(String(a));
+        }
+        D.logs.push(k.toUpperCase() + ' ' + p.join(' '));
+      } catch (e) {}
+      if (o) return o.apply(console, arguments);
+    };
+  })(K[n]);
+
   window.addEventListener('error', function (e) {
     D.errs.push((e.message || 'erreur') + '  [' +
       String(e.filename || '').split('/').pop() + ':' + (e.lineno || 0) + ']');
