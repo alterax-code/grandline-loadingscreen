@@ -19,9 +19,15 @@
   // rendu logiciel, inutile d'attendre de mesurer. Ailleurs on ne touche a
   // rien : l'echelle automatique (fin de page) descendra d'elle-meme si la
   // machine ne suit pas.
+  // Baisser la resolution ne suffisait pas : le canvas reste redessine a chaque
+  // image ET fusionne en plein ecran (mix-blend-mode), ce qui coute cher quelle
+  // que soit sa taille. Dans GMod on va donc jusqu'au bout — illustration fixe,
+  // barre animee — et `parts: 0` supprime les 98 particules a la source, car un
+  // canvas simplement masque continue d'etre DESSINE, seule sa composition est
+  // economisee.
   var gmod = /GMod|Valve Source Client/i.test(navigator.userAgent);
-  window.__glQ = { canvas: gmod ? 0.7 : 1, parts: gmod ? 0.5 : 1, gmod: gmod };
-  if (gmod) document.documentElement.className += ' glq1';
+  window.__glQ = { canvas: gmod ? 0.5 : 1, parts: gmod ? 0 : 1, gmod: gmod };
+  if (gmod) document.documentElement.className += ' glq1 glq2 glq3';
 
   // support.js RATTRAPE ses erreurs et les envoie dans console.error
   // (« [dc-runtime] template compile FAILED for … »). Le panneau de GMod n'a
@@ -69,6 +75,24 @@ html.glq1 *, html.glq1 *::before, html.glq1 *::after {
 /* Palier 2 — plus aucun filtre nulle part. L'image devient plus plate (ni
    flous d'ambiance ni ombres portees), mais elle reste juste. */
 html.glq2 *, html.glq2 *::before, html.glq2 *::after { filter: none !important; }
+
+/* Palier 3 — illustration FIXE. Il ne reste a repeindre que la barre et son
+   pourcentage : plus rien ne peut saccader.
+   Le canvas part en premier : plein ecran, redessine a chaque image, et fusionne
+   en mix-blend-mode par-dessus toute la page.
+   Les animations ne sont pas coupees mais AMENEES A LEUR FIN — un simple
+   `animation: none` laisserait a opacity:0 tout ce qui apparait en fondu, et
+   des pans entiers de la page resteraient invisibles. C'est la recette que le
+   runtime lui-meme emploie pour figer une page a l'impression. */
+html.glq3 canvas { display: none !important; }
+html.glq3 *, html.glq3 *::before, html.glq3 *::after {
+  animation-delay: -99s !important;
+  animation-duration: .001s !important;
+  animation-iteration-count: 1 !important;
+  animation-fill-mode: both !important;
+  animation-play-state: running !important;
+  transition-duration: 0s !important;
+}
 </style>
 </head>
 <body>
@@ -893,23 +917,27 @@ class Component extends DCLogic {
   // qui tient la cadence ne descend jamais d'un palier.
   var Q = window.__glQ || (window.__glQ = { canvas: 1, parts: 1 });
   var brut = window.requestAnimationFrame.bind(window);
-  var niveau = Q.gmod ? 1 : 0;      // GMod demarre deja au palier 1
+  var niveau = 0;
   var debut = 0, images = 0, fenetres = 0;
 
   function descendre(n) {
     if (n <= niveau) return;
+    var cl = document.documentElement.className;
+    for (var k = niveau + 1; k <= n; k++)
+      if (cl.indexOf('glq' + k) < 0) cl += ' glq' + k;
+    document.documentElement.className = cl;
     niveau = n;
-    document.documentElement.className += ' glq' + n;
     if (n === 1) Q.canvas = 0.7;
-    if (n === 2) Q.canvas = 0.5;
+    if (n >= 2) Q.canvas = 0.5;
     if (n >= 3) {
-      // Dernier recours : plafonner la cadence a ~25 img/s. Les animations de
-      // la page sont pilotees par le temps ecoule (dt), donc rien ne se decale
-      // ni ne ralentit vraiment — c'est juste moins fluide.
+      // Le canvas est masque : plus rien ne bouge sauf la barre. On plafonne
+      // donc la cadence a ~15 img/s, largement assez pour une barre de
+      // progression. Les animations de la page sont pilotees par le temps
+      // ecoule (dt) : rien ne se decale ni ne ralentit, c'est juste moins lisse.
       var dernier = 0;
       window.requestAnimationFrame = function (cb) {
         return brut(function pas(t) {
-          if (t - dernier < 40) return brut(pas);
+          if (t - dernier < 66) return brut(pas);
           dernier = t; cb(t);
         });
       };
@@ -925,21 +953,29 @@ class Component extends DCLogic {
     else if (!debut) { debut = t; images = 0; }
     else {
       images++;
-      if (t - debut >= 1000) {
+      // Fenetres COURTES, et on descend d'autant de paliers qu'il faut d'un
+      // coup. L'ecran de chargement ne dure que quelques dizaines de secondes :
+      // une descente d'un palier par seconde laissait voir surtout la version
+      // non degradee — le reglage arrivait trop tard pour servir a quelque chose.
+      if (t - debut >= 500) {
         var fps = images * 1000 / (t - debut);
         // La premiere fenetre est ignoree : decodage des images et montage du
         // composant s'y bousculent, elle n'est pas representative.
-        if (fenetres++ >= 1 && images >= 5) {
+        if (fenetres++ >= 1 && images >= 3) {
           if (fps < 24) descendre(3);
-          else if (fps < 32) descendre(2);
-          else if (fps < 45) descendre(1);
+          else if (fps < 34) descendre(2);
+          else if (fps < 48) descendre(1);
         }
         debut = 0; images = 0;
       }
     }
     if (niveau < 3) brut(mesure);
   }
-  brut(mesure);
+
+  // GMod : on ne mesure meme pas. Le panneau peint sans GPU pendant que le jeu
+  // charge la carte — le resultat est connu d'avance, autant y aller tout de
+  // suite plutot que de faire saccader les premieres secondes.
+  if (Q.gmod) descendre(3); else brut(mesure);
 })();
 </script>
 
