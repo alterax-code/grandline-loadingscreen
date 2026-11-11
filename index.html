@@ -10,28 +10,35 @@ body{background:#02101c url('assets/grandline.jpg') center center/cover no-repea
 </style>
 </head>
 <body>
-<!-- Musique de fond : jouée tant que l'écran de chargement est affiché.
-     GMod ferme cette page à l'entrée en jeu, la musique s'arrête avec elle,
-     juste avant l'écran de sélection. Deux formats : l'ancien navigateur de
-     GMod ne lit que l'ogg, le nouveau (branche 64 bits) lit les deux. -->
+<!-- Musique de fond. GMod ferme cette page à la fin du chargement : le jeu
+     (addon oprp_core, character/cl_joinmusic.lua) reprend alors LA MÊME
+     musique AU MÊME ENDROIT, jusqu'à l'entrée en jeu. Les deux se calent sur
+     l'horloge : position = secondes depuis 1970, modulo la durée du morceau.
+     Le volume est réglé DANS le fichier (−29 LUFS) : la page de GMod ne tient
+     pas toujours compte du volume demandé en JavaScript. Deux formats :
+     l'ancien navigateur de GMod ne lit que l'ogg. -->
 <audio id="musique" loop preload="auto">
   <source src="assets/musique.ogg" type="audio/ogg">
   <source src="assets/musique.mp3" type="audio/mpeg">
 </audio>
 <script>
-// Volume final (0 à 1) et durée du fondu d'entrée (ms) : pas trop fort,
-// le joueur règle le son de son jeu, pas celui de cette page.
-var VOLUME = 0.15, FONDU = 3000;
+var FONDU = 2000;   // ms du fondu d'entrée
 var a = document.getElementById('musique');
 a.volume = 0;
 function monte() {
   var t0 = Date.now();
   (function pas() {
     var k = Math.min(1, (Date.now() - t0) / FONDU);
-    a.volume = VOLUME * k;
+    a.volume = k;
     if (k < 1) setTimeout(pas, 50);
   })();
 }
+function cale() {
+  if (a.duration > 0 && isFinite(a.duration)) {
+    try { a.currentTime = (Date.now() / 1000) % a.duration; } catch (e) {}
+  }
+}
+a.addEventListener('loadedmetadata', cale);
 var p = a.play();
 if (p && p.then) { p.then(monte, function () {}); } else { monte(); }
 </script>
